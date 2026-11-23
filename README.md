@@ -1,8 +1,8 @@
 # Hi there is Jacky Wu👋
 
-**LLM 推理系统 / Inference Systems** — 关注 KV Cache、量化、Triton kernel 和推理框架（SGLang）的工程实现。
+**LLM 推理系统 / Inference Systems** — 关注 KV Cache、量化、Triton / CUDA kernel 和推理框架（SGLang）的运行时性能优化。
 
-- 🔭 最近在做：在 SGLang 里实现 INT8 KV Cache，从量化数学一路做到 Triton kernel 和服务端压测
+- 🔭 最近在做：SGLang 里的 INT8 KV Cache 融合 kernel 与推理框架运行时性能优化（Stream 气泡消除、通信计算隐藏、MTP 推测解码 Overlap）
 
 ---
 
@@ -26,6 +26,23 @@
 - 查清 SGLang 自带的 FP8 KV 在 Qwen2.5-7B 上失效的原因：K 的离群通道，不是溢出
 
 📄 [完整报告](https://github.com/jackwubupt-ops/int8-kv-cache/blob/main/docs/stage4-report.md)
+
+### [llm-runtime-perf-opt](https://github.com/jackwubupt-ops/llm-runtime-perf-opt) — LLM 推理框架运行时性能优化与基准套件
+
+围绕**减少 CUDA Stream 执行气泡、提升硬件利用率**实现的 5 类框架侧核心优化，涵盖融合 D2D 拷贝（CUDA C++ / Triton / PyTorch）、异步 AllGather + `pin_memory` + `Event` 通信计算隐藏、非阻塞 H2D/D2H 同步点消除、DeepSeekMoE 多 Stream 并行以及 MTP 推测解码假设全接受 Overlap，在 RTX 3070 Ti 上完成 16 项 GPU 数值等价测试与端到端评测。
+
+| 优化项 | 基线 | **优化后（本项目）** |
+|---|---|---|
+| 融合算子消除 `for` 循环 D2D（64 / 256 blocks） | 0.989 / 3.973 ms | **0.051 / 0.079 ms（19.3× / 50.5×）** |
+| 异步 AllGather + `pin_memory` + `Event` Overlap | 3.548 ms | **2.421 ms（1.47×，单卡流仿真）** |
+| `pin_memory` + `non_blocking` 消除同步点（30 steps） | 41.27 / 60.71 ms | **29.14 / 26.93 ms（1.42× / 2.25×）** |
+| 多 Stream 并行（SM 未打满 / 8 层 MoE `T=1`） | 0.384 / 1.784 ms | **0.251 / 1.590 ms（1.53× / 1.12×）** |
+| 推测解码 MTP=1 Overlap（CUDA Graph，Batch=16 / 32） | 97.83 / 110.83 ms | **88.28 / 98.51 ms（-9.8% / -11.1%）** |
+
+- 16 项 GPU 单元测试覆盖全 Accept、全 Reject、Batch 混合路径及 CUDA Graph，验证推测解码 Overlap 与串行结果 100% 数值等价（含 Draft KV 事后 O(1) 回滚）
+- 如实复现并剖析两处硬件边界：多 Stream 在 SM/HBM 饱和时收敛至 ~1.0×，以及推测解码在 `Batch=1` 下因 Draft 过短导致 Overlap 无法覆盖开销
+
+📄 [技术报告](https://github.com/jackwubupt-ops/llm-runtime-perf-opt/blob/main/docs/technical-report.md)
 
 ### [PatchLoop](https://github.com/jackwubupt-ops/7068) — 仓库级 bug 定位与多 agent 修复（HKU COMP7608B 课程项目）
 
