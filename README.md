@@ -1,4 +1,4 @@
-# Hi there is Jacky Wu👋
+# Hi, I'm Jacky Wu 👋
 
 **LLM 推理系统 / Inference Systems** — 关注 KV Cache、量化、Triton / CUDA kernel 和推理框架（SGLang）的运行时性能优化。
 
